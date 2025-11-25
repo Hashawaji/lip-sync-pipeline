@@ -1,0 +1,15 @@
+viseme_library/*
+outputs/*
+mfa_workspace/*
+MFA/*
+actors/*
+actors-blink-asset/*
+Montreal-Forced-Aligner/*
+__pycache__/
+*.whl
+*.log
+*.db
+mfa_runtime/*
+mfa_workspace_v3/*
+mfa_cli_files/*
+blink_module/*

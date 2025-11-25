@@ -1,0 +1,27 @@
+# Streamlit App Requirements
+# Python 3.10+ required for NumPy 2.x compatibility
+
+# Web framework
+streamlit>=1.30.0
+
+# Configuration file parsing
+pyyaml>=6.0.0
+
+# Data processing
+numpy>=2.0.0
+opencv-python>=4.8.0
+
+# HTTP requests (for MFA service communication)
+requests>=2.31.0
+
+# Text-to-speech
+gTTS>=2.3.0
+edge-tts>=7.0.0  # Microsoft Edge TTS - Fast, high-quality, male/female voices
+
+# Blink module dependencies (see BLINK_INSTALLATION.md for dlib setup)
+# dlib - Install via conda: conda install -c conda-forge dlib
+# OR via pip (requires build tools): pip install dlib
+perlin-noise>=1.13
+
+# Montreal Forced Aligner (install via conda is preferred)
+# montreal-forced-aligner>=2.0.0

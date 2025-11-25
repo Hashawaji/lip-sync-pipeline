@@ -1,0 +1,51 @@
+name: mfa-dev
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - sudachipy
+  - kalpy[version='>=0.8']
+  - setuptools_scm
+  - coverage
+  - mock
+  - spacy
+  - python[version='>=3.8']
+  - interrogate
+  - pgvector-python
+  - pytest
+  - pytest-cov
+  - pyyaml
+  - coveralls
+  - rich-click
+  - pip
+  - numpy
+  - librosa
+  - seaborn
+  - requests
+  - pytest-timeout
+  - postgresql
+  - dataclassy
+  - sqlalchemy[version='>=2.0']
+  - rich
+  - psycopg2
+  - pynini
+  - matplotlib
+  - scikit-learn
+  - ngram
+  - praatio[version='>=6.0.0']
+  - pysoundfile
+  - baumwelch
+  - openfst
+  - huggingface_hub
+  - kneed
+  - sudachidict-core
+  - tqdm
+  - hdbscan
+  - scipy
+  - pgvector
+  - kaldi[build=*cpu*]
+  - pytest-mypy
+  - spacy-pkuseg
+  - sqlite
+  - dlib
+prefix: /home/ist/miniconda3/envs/mfa-dev
