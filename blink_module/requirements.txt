@@ -1,0 +1,6 @@
+dlib @ file:///C:/Users/hassa/OneDrive/Desktop/pvs_blinking_approach/final/dlib-19.24.99-cp313-cp313-win_amd64.whl#sha256=055c042bb17ef4f76e3bc2bc702476b5b112c83da6b90b996887e495785bccd1
+numpy==2.2.6
+opencv-python==4.12.0.88
+perlin-noise==1.13
+setuptools==80.9.0
+wheel==0.45.1

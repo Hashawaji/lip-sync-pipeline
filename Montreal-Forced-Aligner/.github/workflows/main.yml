@@ -1,0 +1,86 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allow rebuilds via API.
+  repository_dispatch:
+    types: rebuild
+
+concurrency:
+  group: run_tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-64
+
+          #- os: macos-latest
+          #  label: osx-64
+          #  prefix: /Users/runner/miniconda3/envs/my-env
+
+          #- os: windows-latest
+          #  label: win-64
+          #  prefix: C:\Miniconda3\envs\my-env
+
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          fetch-depth: 0
+
+      - name: Install Conda environment with Micromamba
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: github_environment.yml
+          miniforge-version: latest
+
+      - name: Configure mfa
+        shell: bash -l {0}
+        run: python -m montreal_forced_aligner configure --disable_auto_server
+
+      - name: Initialize database
+        shell: bash -l {0}
+        run: python -m montreal_forced_aligner server init -p test
+
+      - name: Check database config
+        shell: bash -l {0}
+        run: cat ~/Documents/MFA/pg_mfa_test/postgresql.conf
+
+      - name: Check init database log
+        shell: bash -l {0}
+        run: cat ~/Documents/MFA/pg_init_log_test.txt
+
+      - name: Check database start log
+        shell: bash -l {0}
+        run: cat ~/Documents/MFA/pg_log_test.txt
+
+      - name: Run tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.MFA_GITHUB_TOKEN }}
+        shell: bash -l {0}
+        run: pytest -x ./tests
+
+      - name: Stop database
+        shell: bash -l {0}
+        run: python -m montreal_forced_aligner server stop -p test
+
+      - name: Check init database log
+        shell: bash -l {0}
+        run: cat ~/Documents/MFA/pg_init_log_test.txt
+
+      - name: Check database start log
+        shell: bash -l {0}
+        run: cat ~/Documents/MFA/pg_log_test.txt
+
+      - name: "Upload coverage to Codecov"
+        uses: "codecov/codecov-action@v3"
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false

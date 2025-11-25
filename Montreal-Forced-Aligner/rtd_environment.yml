@@ -1,0 +1,41 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  - numpy
+  - librosa
+  - tqdm
+  - requests
+  - pyyaml
+  - praatio>=6.0.0
+  - dataclassy
+  - sqlalchemy>=2.0
+  - pynini
+  - pgvector
+  - pgvector-python
+  - postgresql
+  - scikit-learn
+  - hdbscan
+  - psycopg2
+  - click
+  - setuptools_scm
+  - importlib_metadata
+  - sphinx
+  - numpydoc
+  - sphinx-design
+  - sphinx-click
+  - sphinx-intl
+  - sphinx-immaterial
+  - pydata-sphinx-theme
+  - myst-parser
+  - mock
+  - setuptools-scm
+  - kneed
+  - matplotlib
+  - seaborn
+  - rich
+  - rich-click
+  - kaldi =*=cpu*
+  - kalpy>=0.8
+  - compilers
