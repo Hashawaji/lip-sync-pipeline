@@ -3,6 +3,74 @@ import os
 import math
 from phoneme_preprocessing_utils import fill_gaps_with_silence
 
+# Phoneme conversion mappings (ARPABET -> IPA -> VISEME)
+ARPABET_TO_IPA = {
+    # Vowels
+    'AA': 'ɑ', 'AE': 'æ', 'AH': 'ə', 'AO': 'ɔ', 'AW': 'aʊ', 'AY': 'aɪ',
+    'EH': 'ɛ', 'ER': 'ɝ', 'EY': 'eɪ', 'IH': 'ɪ', 'IY': 'i', 'OW': 'oʊ',
+    'OY': 'ɔɪ', 'UH': 'ʊ', 'UW': 'u',
+    # Consonants
+    'B': 'b', 'CH': 'tʃ', 'D': 'd', 'DH': 'ð', 'F': 'f', 'G': 'g',
+    'HH': 'h', 'JH': 'dʒ', 'K': 'k', 'L': 'l', 'M': 'm', 'N': 'n',
+    'NG': 'ŋ', 'P': 'p', 'R': 'ɹ', 'S': 's', 'SH': 'ʃ', 'T': 't',
+    'TH': 'θ', 'V': 'v', 'W': 'w', 'Y': 'j', 'Z': 'z', 'ZH': 'ʒ',
+    # Additional ARPABET phones
+    'AX': 'ə', 'IX': 'ɨ', 'DX': 'ɾ',
+    # Silence markers
+    'SIL': 'sil', 'SP': 'sp'
+}
+
+IPA_TO_VISEME = {
+    # p viseme (bilabial)
+    'b': 'b', 'm': 'b', 'p': 'b',
+    # t viseme (alveolar)
+    'd': 'd', 'l': 'd', 'n': 'd', 't': 'd',
+    # S viseme (postalveolar)
+    'ʃ': 'ʃ', 'ʒ': 'ʃ', 'tʃ': 'ʃ', 'dʒ': 'ʃ',
+    # T viseme (dental)
+    'ð': 'ð', 'θ': 'ð',
+    # f viseme (labiodental)
+    'f': 'f', 'v': 'f',
+    # k viseme (velar/glottal)
+    'ɡ': 'ɡ', 'g': 'ɡ', 'h': 'ɡ', 'k': 'ɡ', 'ŋ': 'ɡ',
+    # i viseme (high front)
+    'j': 'j', 'i': 'j', 'ɪ': 'j',
+    # r viseme (rhotic)
+    'ɹ': 'ɹ', 'ɝ': 'ɹ', 'ɚ': 'ɹ',
+    # s viseme (sibilant)
+    's': 's', 'z': 's',
+    # u viseme (high back rounded)
+    'w': 'w', 'u': 'w', 'ʊ': 'w',
+    # @ viseme (schwa/central)
+    'ə': 'ə',
+    # a viseme (low front/central)
+    'æ': 'æ', 'aɪ': 'æ', 'aʊ': 'æ', 'ɑ': 'æ',
+    # e viseme (mid front)
+    'eɪ': 'eɪ',
+    # E viseme (mid-low front/central)
+    'ɛ': 'ɛ', 'ʌ': 'ɛ',
+    # o viseme (mid back rounded)
+    'oʊ': 'oʊ',
+    # O viseme (mid-low back rounded)
+    'ɔ': 'ɔ', 'ɔɪ': 'ɔ',
+    # Silence markers
+    'sil': 'sil', 'sp': 'sil', 'spn': 'sil', 'ɨ': 'sil', 'ɾ': 'sil'
+}
+
+def convert_arpabet_to_viseme(arpabet_phone):
+    """Convert ARPABET phoneme to VISEME format."""
+    # Remove stress markers (0, 1, 2)
+    import re
+    base_phone = re.sub(r'[012]$', '', arpabet_phone)
+    
+    # Convert to IPA first
+    ipa_phone = ARPABET_TO_IPA.get(base_phone, base_phone)
+    
+    # Then to viseme
+    viseme_phone = IPA_TO_VISEME.get(ipa_phone, ipa_phone)
+    
+    return viseme_phone
+
 def enrich_sequence_with_repetitions(sequence: list, boundaries_dict: dict) -> list:
     """
     For each phoneme occurrence, split into multiple consecutive entries
@@ -249,6 +317,44 @@ if __name__ == "__main__":
             
             verify_enriched_sequence(fill_gaps_with_silence(original_sequence), enriched_sequence)
             file_data["enriched_sequence"] = enriched_sequence
+    
+    # Handle MFA CLI v3 output format (phonemes at root level)
+    if "phonemes" in data and "files" not in data:
+        print(f"\nDetected MFA CLI v3 output format, converting to viseme phonemes...")
+        
+        # Convert ARPABET phonemes to VISEME
+        viseme_sequence = []
+        for phoneme_entry in data["phonemes"]:
+            arpabet_phone = phoneme_entry["phoneme"]
+            viseme_phone = convert_arpabet_to_viseme(arpabet_phone)
+            
+            viseme_sequence.append({
+                "phoneme": viseme_phone,
+                "start_s": phoneme_entry["start"],
+                "end_s": phoneme_entry["end"],
+                "duration_s": phoneme_entry["duration"]
+            })
+        
+        print(f"Converted {len(viseme_sequence)} phonemes from ARPABET to VISEME")
+        print(f"\nProcessing with {args.transform_type} transform...")
+        
+        if args.transform_type == "clusters":
+            enriched_sequence = enrich_sequence_with_repetitions(fill_gaps_with_silence(viseme_sequence), phoneme_boundaries or {})
+        else:  # fixed-length
+            enriched_sequence = enrich_sequence_with_fixed_length(fill_gaps_with_silence(viseme_sequence), args.num_frames, args.fps)
+            print(f"Using {args.num_frames} frames per segment at {args.fps} FPS (segment duration: {args.num_frames/args.fps:.3f}s)")
+        
+        verify_enriched_sequence(fill_gaps_with_silence(viseme_sequence), enriched_sequence)
+        
+        # Restructure to match expected format
+        data = {
+            "files": {
+                data.get("file", "audio"): {
+                    "viseme_phonemes": viseme_sequence,
+                    "enriched_sequence": enriched_sequence
+                }
+            }
+        }
 
     # Auto-generate output filename if not provided
     if args.output_json:

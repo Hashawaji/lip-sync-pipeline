@@ -19,15 +19,13 @@ AUDIO_FILE="${BASE_DIR}/audio.mp3"
 OUTPUT_DIR="${BASE_DIR}"
 
 # Path to the MFA phoneme CLI script
-MFA_SCRIPT="/home/ist/Desktop/lip-sync-pipeline/mfa_phoneme_cli_v3.py"
-# MFA_SCRIPT="/home/ist/Desktop/lip-sync-pipeline/mfa_phoneme_fast_cli.py"
+MFA_SCRIPT="/Users/admin/thesis/lip-sync-pipeline/mfa_cli_files/mfa_phoneme_cli_v3.py"
 
 # Path to the phoneme JSON transformation script
-TRANSFORM_SCRIPT="/home/ist/Desktop/lip-sync-pipeline/phoneme-json-transformation.py"
+TRANSFORM_SCRIPT="/Users/admin/thesis/lip-sync-pipeline/phoneme-json-transformation.py"
 
 # Conda environment name
-CONDA_ENV="mfa-env"
-# CONDA_ENV="mfa-dev"
+CONDA_ENV="mfa-dev"
 
 # Activate conda environment
 echo "Activating conda environment: $CONDA_ENV"
@@ -95,8 +93,8 @@ echo "Step 1: Running MFA phoneme extraction"
 echo "----------------------------------------"
 python3 "$MFA_SCRIPT" \
     --single_file "$AUDIO_FILE" "$TEXT_FILE" \
-    --output_dir "$OUTPUT_DIR" \
-    --num_jobs 1
+    --output "$OUTPUT_DIR/complete_phoneme_alignments.json" \
+    --num_jobs 4
 
 # Check if MFA succeeded
 if [ $? -ne 0 ]; then
@@ -122,7 +120,8 @@ echo "Step 2: Running phoneme JSON transformation"
 echo "----------------------------------------"
 python3 "$TRANSFORM_SCRIPT" \
     --input_json "$PHONEME_JSON" \
-    --transform-type fixed-length
+    --transform-type fixed-length \
+    --fps 60.0
 
 # Check if transformation succeeded
 if [ $? -ne 0 ]; then
@@ -134,21 +133,21 @@ fi
 echo "✓ Successfully completed phoneme JSON transformation"
 echo ""
 
-# Step 3: Clean corpus folder
-CORPUS_DIR="/home/ist/Desktop/video-retalking/mfa_workspace/corpus"
-if [ -d "$CORPUS_DIR" ]; then
-    echo "----------------------------------------"
-    echo "Step 3: Cleaning corpus folder"
-    echo "----------------------------------------"
-    rm -rf "$CORPUS_DIR"/*
-    if [ $? -eq 0 ]; then
-        echo "✓ Successfully cleaned corpus folder"
-    else
-        echo "⚠ Warning: Failed to clean corpus folder"
-    fi
-else
-    echo "Note: Corpus folder not found at $CORPUS_DIR (skipping cleanup)"
-fi
+# Step 3: Clean corpus folder (skip on macOS if not needed)
+# CORPUS_DIR="/home/ist/Desktop/video-retalking/mfa_workspace/corpus"
+# if [ -d "$CORPUS_DIR" ]; then
+#     echo "----------------------------------------"
+#     echo "Step 3: Cleaning corpus folder"
+#     echo "----------------------------------------"
+#     rm -rf "$CORPUS_DIR"/*
+#     if [ $? -eq 0 ]; then
+#         echo "✓ Successfully cleaned corpus folder"
+#     else
+#         echo "⚠ Warning: Failed to clean corpus folder"
+#     fi
+# else
+#     echo "Note: Corpus folder not found at $CORPUS_DIR (skipping cleanup)"
+# fi
 
 echo ""
 echo "=========================================="
