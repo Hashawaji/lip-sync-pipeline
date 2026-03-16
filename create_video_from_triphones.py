@@ -55,18 +55,89 @@ import random
 from pathlib import Path
 
 try:
-    from moviepy.editor import VideoFileClip, AudioFileClip, ImageSequenceClip
+    # Try new moviepy 2.x API first
+    from moviepy import VideoFileClip, AudioFileClip, ImageSequenceClip
     MOVIEPY_AVAILABLE = True
 except ImportError:
-    print("Error: MoviePy is required for smooth video output. Please install it with:")
-    print("pip install moviepy")
-    exit(1)
+    try:
+        # Fall back to old moviepy 1.x API
+        from moviepy.editor import VideoFileClip, AudioFileClip, ImageSequenceClip
+        MOVIEPY_AVAILABLE = True
+    except ImportError:
+        print("Error: MoviePy is required for smooth video output. Please install it with:")
+        print("pip install moviepy")
+        exit(1)
 
 
 # Global list of common phonemes for random mapping
 COMMON_PHONEMES = [
     'sil'
 ]
+
+# Global master I-frame for P-frame reconstruction
+_MASTER_IFRAME = None
+_MASTER_IFRAME_PATH = None
+
+
+def load_master_iframe(visemes_library_dir):
+    """Load and cache the master I-frame for P-frame reconstruction."""
+    global _MASTER_IFRAME, _MASTER_IFRAME_PATH
+    
+    master_path = os.path.join(visemes_library_dir, 'master_reference.npz')
+    
+    # Return cached if already loaded
+    if _MASTER_IFRAME is not None and _MASTER_IFRAME_PATH == master_path:
+        return _MASTER_IFRAME
+    
+    if os.path.exists(master_path):
+        try:
+            data = np.load(master_path, allow_pickle=True)
+            
+            # Check for 'i_frame' key (new format)
+            if 'i_frame' in data.keys():
+                i_frame_data = data['i_frame']
+                # Handle 0-dimensional array containing bytes
+                if i_frame_data.shape == ():
+                    encoded = i_frame_data.item()  # Extract bytes from 0-d array
+                    arr = np.frombuffer(encoded, dtype=np.uint8)
+                    _MASTER_IFRAME = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                else:
+                    arr = np.frombuffer(i_frame_data, dtype=np.uint8)
+                    _MASTER_IFRAME = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            else:
+                # Old format: first key contains the encoded frame
+                keys = list(data.keys())
+                if keys:
+                    encoded = data[keys[0]]
+                    if isinstance(encoded, (bytes, np.bytes_)):
+                        arr = np.frombuffer(encoded, dtype=np.uint8)
+                        _MASTER_IFRAME = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    elif isinstance(encoded, np.ndarray):
+                        if encoded.shape == ():
+                            # 0-dimensional array
+                            arr = np.frombuffer(encoded.item(), dtype=np.uint8)
+                            _MASTER_IFRAME = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        elif encoded.dtype == np.uint8 and len(encoded.shape) == 1:
+                            _MASTER_IFRAME = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+                        else:
+                            _MASTER_IFRAME = encoded
+            
+            data.close()
+            _MASTER_IFRAME_PATH = master_path
+            if _MASTER_IFRAME is not None:
+                print(f"Loaded master I-frame: {_MASTER_IFRAME.shape}")
+            else:
+                print("Warning: Failed to decode master I-frame")
+            return _MASTER_IFRAME
+        except Exception as e:
+            print(f"Warning: Failed to load master I-frame from {master_path}: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"Note: No master_reference.npz found at {master_path}")
+        print("      Frames may be stored as full JPEG (no I-frame + P-frame encoding)")
+    
+    return None
 
 
 def map_spn_to_random_phoneme():
@@ -86,15 +157,30 @@ def load_enriched_phoneme_data_from_json(json_file_path, file_key="master_audio"
     return enriched_sequence
 
 
-def get_phoneme_frame_count(phoneme_entry):
+def get_phoneme_frame_count(phoneme_entry, fps=25):
     """
-    Determine frame count based on phoneme entry.
-    Regular phoneme: 3 frames
-    Single underscore (_): 1 frame  
-    Double underscore (__): 2 frames
+    Determine frame count based on actual phoneme duration.
+    Uses the 'duration' or 'duration_s' field, or calculates from start/end times.
+    Falls back to underscore-based heuristic only if no timing available.
     """
-    phoneme = phoneme_entry['phoneme']
+    # Try to get actual duration (support both key formats)
+    duration = phoneme_entry.get('duration') or phoneme_entry.get('duration_s')
     
+    if duration is None:
+        # Calculate from start/end if available (support both key formats)
+        start = phoneme_entry.get('start') or phoneme_entry.get('start_s')
+        end = phoneme_entry.get('end') or phoneme_entry.get('end_s')
+        if start is not None and end is not None:
+            duration = end - start
+    
+    if duration is not None and duration > 0:
+        # Calculate exact frame count from duration
+        # Round to nearest integer, minimum 1 frame
+        frame_count = max(1, round(duration * fps))
+        return frame_count
+    
+    # Fallback: use underscore-based heuristic (legacy behavior)
+    phoneme = phoneme_entry['phoneme']
     if phoneme.endswith('__'):
         return 2
     elif phoneme.endswith('_'):
@@ -114,22 +200,72 @@ def get_base_phoneme(phoneme_entry):
     else:
         return phoneme
 
-def load_triphone_frames(triphone_dir):
-    """Load frames from a triphone directory."""
+def load_triphone_frames(triphone_dir, master_iframe=None):
+    """
+    Load frames from a triphone directory.
+    
+    If frames are stored using I-frame + P-frame differential encoding,
+    reconstructs full frames by adding back the master I-frame.
+    """
+    global _MASTER_IFRAME
+    
     if not os.path.exists(triphone_dir):
         return [], None
 
-    # Load metadata
+    # Load metadata if exists
     metadata_path = os.path.join(triphone_dir, 'metadata.json')
     metadata = None
     if os.path.exists(metadata_path):
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
 
-    # Load frames
-    frame_files = sorted([f for f in os.listdir(triphone_dir) if f.startswith('frame_') and f.endswith('.jpg')])
-    frames = []
+    # Use provided master_iframe or global one
+    if master_iframe is None:
+        master_iframe = _MASTER_IFRAME
+    
+    # If master iframe exists, assume differential encoding
+    # (metadata.json with 'encoding' field isn't always present)
+    is_differential = master_iframe is not None
 
+    frames = []
+    
+    # Try loading from npz file first (compressed format with JPEG-encoded frames)
+    npz_path = os.path.join(triphone_dir, 'frames.npz')
+    if os.path.exists(npz_path):
+        try:
+            data = np.load(npz_path, allow_pickle=True)
+            # Get the first (usually only) key in the npz
+            keys = list(data.keys())
+            if keys:
+                encoded_frames = data[keys[0]]
+                # Each element is JPEG-encoded bytes
+                for encoded in encoded_frames:
+                    if isinstance(encoded, (bytes, np.bytes_)):
+                        arr = np.frombuffer(encoded, dtype=np.uint8)
+                        decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        if decoded is not None:
+                            # Reconstruct full frame if using differential encoding
+                            if is_differential:
+                                # decoded is diff_shifted = (original - master) + 128
+                                # So: original = master + (decoded - 128)
+                                diff = decoded.astype(np.int16) - 128
+                                frame = master_iframe.astype(np.int16) + diff
+                                frame = np.clip(frame, 0, 255).astype(np.uint8)
+                            else:
+                                frame = decoded
+                            frames.append(frame)
+                    elif isinstance(encoded, np.ndarray) and encoded.dtype == np.uint8:
+                        # Already decoded frame
+                        frames.append(encoded)
+            data.close()
+            if frames:
+                return frames, metadata
+        except Exception as e:
+            print(f"Warning: Failed to load npz from {npz_path}: {e}")
+
+    # Fallback: Load individual frame files (jpg/png)
+    frame_files = sorted([f for f in os.listdir(triphone_dir) if f.startswith('frame_') and (f.endswith('.jpg') or f.endswith('.png'))])
+    
     for frame_file in frame_files:
         frame_path = os.path.join(triphone_dir, frame_file)
         frame = cv2.imread(frame_path)
@@ -727,7 +863,7 @@ def filter_enriched_sequence_by_time(enriched_sequence, start_time, end_time):
     
     for entry in enriched_sequence:
         # Calculate entry duration based on frame count
-        frame_count = get_phoneme_frame_count(entry)
+        frame_count = get_phoneme_frame_count(entry, fps)
         entry_duration = frame_count / fps
         entry_start = cumulative_time
         entry_end = cumulative_time + entry_duration
@@ -754,6 +890,9 @@ def create_video_from_enriched_sequence(triphone_visemes_dir, enriched_sequence,
     print(f"Audio: {audio_path}")
     print(f"Output: {output_path}")
     print(f"Settings: FPS={fps}, Smooth Transitions={smooth_transitions}, Motion Interpolation={motion_interpolation}, Interpolate Frames={interpolate_frames_flag}")
+    
+    # Load master I-frame for P-frame reconstruction (if using differential encoding)
+    master_iframe = load_master_iframe(triphone_visemes_dir)
     
     # If interpolating frames, we'll triple the effective FPS (adds 2 frames between each pair)
     if interpolate_frames_flag:
@@ -839,7 +978,7 @@ def create_video_from_enriched_sequence(triphone_visemes_dir, enriched_sequence,
     
     for i, phoneme_entry in enumerate(filtered_sequence):
         current_base = get_base_phoneme(phoneme_entry)
-        frame_count = get_phoneme_frame_count(phoneme_entry)
+        frame_count = get_phoneme_frame_count(phoneme_entry, fps)
         
         # Get triphone context first for logging
         left, current, right, triphone_name = get_triphone_context_enriched(filtered_sequence, i)

@@ -183,9 +183,9 @@ For paper completeness, consider:
 ## 8. Implementation Priority
 
 ### Phase 1: Core Metrics (Must Have)
-1. ✅ LSE-C (SyncNet confidence) - Industry standard
-2. ✅ SSIM/PSNR mouth region - Visual quality
-3. ✅ Latency/FPS benchmark - Your key advantage
+1. ✅ LSE-C/LSE-D (SyncNet) - **IMPLEMENTED** in `syncnet/evaluator.py`
+2. ✅ SSIM/PSNR mouth region - **IMPLEMENTED** in `visual_quality.py`
+3. ⬜ Latency/FPS benchmark - Your key advantage
 
 ### Phase 2: Comparison (Should Have)
 4. ⬜ LMD (Landmark distance)
