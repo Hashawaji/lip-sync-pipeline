@@ -1,0 +1,17 @@
+{
+  "av_correlation": 0.09419148703853641,
+  "av_correlation_best": 0.2605239193061059,
+  "sync_offset_frames": -6,
+  "n_frames": 245,
+  "quality": "Very Poor",
+  "audio_energy_stats": {
+    "mean": 2331.9187378269335,
+    "std": 2048.0966436956683,
+    "max": 7670.042601026257
+  },
+  "mouth_movement_stats": {
+    "mean": 1.7156615673338864,
+    "std": 1.3945722900008861,
+    "max": 5.375346049910473
+  }
+}
