@@ -193,10 +193,14 @@ class SyncNetEvaluator:
     
     def _find_shape_predictor(self) -> Optional[str]:
         """Find dlib shape predictor file."""
+        # Paths relative to this evaluator file resolve to repo-bundled assets.
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         common_paths = [
             "shape_predictor_68_face_landmarks.dat",
             os.path.expanduser("~/.dlib/shape_predictor_68_face_landmarks.dat"),
             "/usr/share/dlib/shape_predictor_68_face_landmarks.dat",
+            os.path.join(repo_root, "blink_module", "assets",
+                         "shape_predictor_68_face_landmarks.dat"),
         ]
         for path in common_paths:
             if os.path.exists(path):
